@@ -180,6 +180,7 @@ class PeerClient(threading.Thread):
     def run(self):
         print("Peer client started...")
         # connects to the server of other peer
+        print("Connecting to " + self.ipToConnect + ":" + str(self.portToConnect) + "...")
         self.tcpClientSocket.connect((self.ipToConnect, self.portToConnect))
         # if the server of this peer is not connected by someone else and if this is the requester side peer client then enters here
         if self.peerServer.isChatRequested == 0 and self.responseReceived is None:
