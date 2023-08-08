@@ -107,7 +107,7 @@ class ClientThread(threading.Thread):
                     # and removes the thread for this user from tcpThreads
                     # socket is closed and timer thread of the udp for this
                     # user is cancelled
-                    if len(message) > 1 and message[1] is not None and db.is_account_online(message[1]):
+                    if len(message) > 1 and message[1] != None and db.is_account_online(message[1]):
                         db.user_logout(message[1])
                         self.lock.acquire()
                         try:
@@ -142,6 +142,38 @@ class ClientThread(threading.Thread):
                         response = "search-user-not-found"
                         logging.info("Send to " + self.ip + ":" + str(self.port) + " -> " + response) 
                         self.tcpClientSocket.send(response.encode())
+
+                elif message[0] == "CREATE":
+                    # CREATE-exist is sent to peer,
+                    # if an room with this username already exists
+                    if db.is_room_exist(message[1]):
+                        response = "room-exist"
+                        print("From-> " + self.ip + ":" + str(self.port) + " " + response)
+                        logging.info("Send to " + self.ip + ":" + str(self.port) + " -> " + response)  
+                        self.tcpClientSocket.send(response.encode())
+                    else:
+                        db.register_room(message[1])
+                        response = "creation-success"
+                        logging.info("Send to " + self.ip + ":" + str(self.port) + " -> " + response) 
+                        self.tcpClientSocket.send(response.encode())
+
+                elif message[0] == "JOINROOM":
+                    # checks if an account with the username exists
+                    if db.is_room_exist(message[1]):
+                        # checks if the room exists
+                        # and sends the related response to peer
+                        response = "success"
+                        id, peers = db.get_room_peers(message[1])
+                        peers.append(message[2])
+                        db.update_room(id, peers)
+                        logging.info("Send to " + self.ip + ":" + str(self.port) + " -> " + response) 
+                        self.tcpClientSocket.send(response.encode())
+                    # enters if username does not exist 
+                    else:
+                        response = "search-fail"
+                        logging.info("Send to " + self.ip + ":" + str(self.port) + " -> " + response) 
+                        self.tcpClientSocket.send(response.encode())
+
             except OSError as oErr:
                 logging.error("OSError: {0}".format(oErr)) 
 

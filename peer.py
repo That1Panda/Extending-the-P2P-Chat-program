@@ -310,17 +310,17 @@ class peerMain:
         # as long as the user is not logged out, asks to select an option in the menu
         while choice != "3":
             # menu selection prompt
-            choice = input("Choose: \nCreate account: 1\nLogin: 2\nLogout: 3\nSearch: 4\nStart a chat: 5\n")
+            choice = input("Choose: \nCreate account: 1\nLogin: 2\nLogout: 3\nSearch: 4\nStart a chat: 5\nCreate Chatroom: 6\nJoin a room: 7\n")
             # if choice is 1, creates an account with the username
             # and password entered by the user
-            if choice is "1":
+            if choice == "1":
                 username = input("username: ")
                 password = input("password: ")
                 
                 self.createAccount(username, password)
             # if choice is 2 and user is not logged in, asks for the username
             # and the password to login
-            elif choice is "2" and not self.isOnline:
+            elif choice == "2" and not self.isOnline:
                 username = input("username: ")
                 password = input("password: ")
                 # asks for the port number for server's tcp socket
@@ -328,7 +328,7 @@ class peerMain:
                 
                 status = self.login(username, password, peerServerPort)
                 # is user logs in successfully, peer variables are set
-                if status is 1:
+                if status == 1:
                     self.isOnline = True
                     self.loginCredentials = (username, password)
                     self.peerServerPort = peerServerPort
@@ -339,7 +339,7 @@ class peerMain:
                     self.sendHelloMessage()
             # if choice is 3 and user is logged in, then user is logged out
             # and peer variables are set, and server and client sockets are closed
-            elif choice is "3" and self.isOnline:
+            elif choice == "3" and self.isOnline:
                 self.logout(1)
                 self.isOnline = False
                 self.loginCredentials = (None, None)
@@ -349,25 +349,25 @@ class peerMain:
                     self.peerClient.tcpClientSocket.close()
                 print("Logged out successfully")
             # is peer is not logged in and exits the program
-            elif choice is "3":
+            elif choice == "3":
                 self.logout(2)
             # if choice is 4 and user is online, then user is asked
             # for a username that is wanted to be searched
-            elif choice is "4" and self.isOnline:
+            elif choice == "4" and self.isOnline:
                 username = input("Username to be searched: ")
                 searchStatus = self.searchUser(username)
                 # if user is found its ip address is shown to user
-                if searchStatus is not None and searchStatus != 0:
+                if searchStatus != None and searchStatus != 0:
                     print("IP address of " + username + " is " + searchStatus)
             # if choice is 5 and user is online, then user is asked
             # to enter the username of the user that is wanted to be chatted
-            elif choice is "5" and self.isOnline:
+            elif choice == "5" and self.isOnline:
                 username = input("Enter the username of user to start chat: ")
                 searchStatus = self.searchUser(username)
                 # if searched user is found, then its ip address and port number is retrieved
                 # and a client thread is created
                 # main process waits for the client thread to finish its chat
-                if searchStatus is not None and searchStatus is not 0:
+                if searchStatus != None and searchStatus != 0:
                     searchStatus = searchStatus.split(":")
                     self.peerClient = PeerClient(searchStatus[0], int(searchStatus[1]) , self.loginCredentials[0], self.peerServer, None)
                     self.peerClient.start()
@@ -377,6 +377,20 @@ class peerMain:
             # if the response is ok then a client is created for this peer with the OK message and that's why it will directly
             # sent an OK message to the requesting side peer server and waits for the user input
             # main process waits for the client thread to finish its chat
+
+            elif choice == "6" and self.isOnline:
+            #This choice creates a new chatroom and saves it in the database
+                room_id = input("Enter a Room ID: ")
+                self.create_room(room_id)
+                print("Room Created Successfully\n")
+
+            elif choice == "7" and self.isOnline:
+            #This choice joins already existing chatroom
+                room_id = input("Enter a Room ID: ")
+                self.search_room(room_id)
+
+
+
             elif choice == "OK" and self.isOnline:
                 okMessage = "OK " + self.loginCredentials[0]
                 logging.info("Send to " + self.peerServer.connectedPeerIP + " -> " + okMessage)
@@ -397,6 +411,38 @@ class peerMain:
         # socket of the client is closed
         if choice != "CANCEL":
             self.tcpClientSocket.close()
+
+    
+    def create_room(self, room_id):
+        # join message to create an account is composed and sent to registry
+        # if response is success then informs the user for account creation
+        # if response is exist then informs the user for account existence
+        message = "CREATE " + room_id
+        logging.info("Send to " + self.registryName + ":" + str(self.registryPort) + " -> " + message)
+        self.tcpClientSocket.send(message.encode())
+        response = self.tcpClientSocket.recv(1024).decode()
+        logging.info("Received from " + self.registryName + " -> " + response)
+        if response == "creation-success":
+            print("Room created...")
+        elif response == "room_exist":
+            print("Room already exits")
+
+    # function for searching an online user
+    def search_room(self, room_id):
+        # a search message is composed and sent to registry
+        # custom value is returned according to each response
+        # to this search message
+        message = "JOINROOM " + room_id + " " + str(self.peerServerPort)
+        logging.info("Send to " + self.registryName + ":" + str(self.registryPort) + " -> " + message)
+        self.tcpClientSocket.send(message.encode())
+        response = self.tcpClientSocket.recv(1024).decode().split()
+        logging.info("Received from " + self.registryName + " -> " + " ".join(response))
+        if response[0] == "success":
+            print(room_id + " is found successfully...")
+            print("\nYou have joined the room ...\n")
+        elif response[0] == "search-fail":
+            print(room_id + " is not found")
+
 
     # account creation function
     def createAccount(self, username, password):
@@ -430,7 +476,7 @@ class peerMain:
             return 0
         elif response == "login-online":
             print("Account is already online...")
-            return 2
+            return 1
         elif response == "login-wrong-password":
             print("Wrong password...")
             return 3
