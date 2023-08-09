@@ -21,6 +21,7 @@ class PeerServer(threading.Thread):
         self.username = username
         # tcp socket for peer server
         self.tcpServerSocket = socket(AF_INET, SOCK_STREAM)
+        self.udpServerSocket = socket(AF_INET, SOCK_DGRAM)
         # port number of the peer server
         self.peerServerPort = peerServerPort
         # if 1, then user is already chatting with someone
@@ -36,7 +37,8 @@ class PeerServer(threading.Thread):
         self.isOnline = True
         # keeps the username of the peer that this peer is chatting with
         self.chattingClientName = None
-    
+        self.chat = 0
+        self.room = 0   
 
     # main method of the peer server thread
     def run(self):
@@ -55,12 +57,16 @@ class PeerServer(threading.Thread):
             self.peerServerHostname = ni.ifaddresses('en0')[ni.AF_INET][0]['addr']
 
         # ip address of this peer
-        #self.peerServerHostname = 'localhost'
+        #self.peerServerHostname = 'localhost' 
+        
         # socket initializations for the server of the peer
-        self.tcpServerSocket.bind((self.peerServerHostname, self.peerServerPort))
-        self.tcpServerSocket.listen(4)
+        #self.tcpServerSocket.bind((self.peerServerHostname, self.peerServerPort))
+        #self.tcpServerSocket.listen(4)
+
+        self.udpServerSocket.bind(("192.168.1.104", self.peerServerPort))
+
         # inputs sockets that should be listened
-        inputs = [self.tcpServerSocket]
+        inputs = [self.udpServerSocket, self.tcpServerSocket]
         # server listens as long as there is a socket to listen in the inputs list and the user is online
         while inputs and self.isOnline:
             # monitors for the incoming connections
@@ -70,7 +76,7 @@ class PeerServer(threading.Thread):
                 for s in readable:
                     # if the socket that is receiving the connection is 
                     # the tcp socket of the peer's server, enters here
-                    if s is self.tcpServerSocket:
+                    if s is self.tcpServerSocket and self.chat == 1:
                         # accepts the connection, and adds its connection socket to the inputs list
                         # so that we can monitor that socket as well
                         connected, addr = s.accept()
@@ -82,6 +88,19 @@ class PeerServer(threading.Thread):
                             print(self.username + " is connected from " + str(addr))
                             self.connectedPeerSocket = connected
                             self.connectedPeerIP = addr[0]
+                    # Here we handle messages from rooms
+                    elif s is self.udpServerSocket:
+                        #socket initializatoion for rooms
+                        #self.udpServerSocket.bind((self.peerServerHostname, self.peerServerPort))
+
+                        while(1):
+                            data, address = self.udpServerSocket.recvfrom(1024)
+                            messageReceived = data.decode()
+                            if len(messageReceived) != 0:
+                                print(messageReceived)
+                            if(len(messageReceived)!=0 and messageReceived[:2] == ":q"):
+                                self.room = 0
+                                break
                     # if the socket that receives the data is the one that
                     # is used to communicate with a connected peer, then enters here
                     else:
@@ -91,7 +110,7 @@ class PeerServer(threading.Thread):
                         logging.info("Received from " + str(self.connectedPeerIP) + " -> " + str(messageReceived))
                         # if message is a request message it means that this is the receiver side peer server
                         # so evaluate the chat request
-                        if len(messageReceived) > 11 and messageReceived[:12] == "CHAT-REQUEST":
+                        if len(messageReceived) > 11 and messageReceived[:12] == "CHAT-REQUEST" and self.room == 0:
                             # text for proper input choices is printed however OK or REJECT is taken as input in main process of the peer
                             # if the socket that we received the data belongs to the peer that we are chatting with,
                             # enters here
@@ -117,35 +136,40 @@ class PeerServer(threading.Thread):
                                 # remove the peer from the inputs list so that it will not monitor this socket
                                 inputs.remove(s)
                         # if an OK message is received then ischatrequested is made 1 and then next messages will be shown to the peer of this server
-                        elif messageReceived == "OK":
+                        elif messageReceived == "OK" and self.room == 0:
                             self.isChatRequested = 1
                         # if an REJECT message is received then ischatrequested is made 0 so that it can receive any other chat requests
-                        elif messageReceived == "REJECT":
+                        elif messageReceived == "REJECT" and self.room ==0:
                             self.isChatRequested = 0
                             inputs.remove(s)
                         # if a message is received, and if this is not a quit message ':q' and 
                         # if it is not an empty message, show this message to the user
-                        elif messageReceived[:2] != ":q" and len(messageReceived)!= 0:
+                        elif messageReceived[:2] != ":q" and len(messageReceived)!= 0 and self.room == 0:
                             print(self.chattingClientName + ": " + messageReceived)
                         # if the message received is a quit message ':q',
                         # makes ischatrequested 1 to receive new incoming request messages
                         # removes the socket of the connected peer from the inputs list
                         elif messageReceived[:2] == ":q":
-                            self.isChatRequested = 0
-                            inputs.clear()
-                            inputs.append(self.tcpServerSocket)
-                            # connected peer ended the chat
-                            if len(messageReceived) == 2:
-                                print("User you're chatting with ended the chat")
-                                print("Press enter to quit the chat: ")
+                            if(self.room == 1):
+                                self.room = 0
+                                #leave_room()
+                            else:    
+                                self.isChatRequested = 0
+                                inputs.clear()
+                                inputs.append(self.tcpServerSocket)
+                                # connected peer ended the chat
+                                if len(messageReceived) == 2:
+                                    print("User you're chatting with ended the chat")
+                                    print("Press enter to quit the chat: ")
                         # if the message is an empty one, then it means that the
                         # connected user suddenly ended the chat(an error occurred)
-                        elif len(messageReceived) == 0:
+                        elif len(messageReceived) == 0 and self.room != 1:    
                             self.isChatRequested = 0
                             inputs.clear()
                             inputs.append(self.tcpServerSocket)
                             print("User you're chatting with suddenly ended the chat")
                             print("Press enter to quit the chat: ")
+
             # handles the exceptions, and logs them
             except OSError as oErr:
                 logging.error("OSError: {0}".format(oErr))
@@ -156,7 +180,7 @@ class PeerServer(threading.Thread):
 # Client side of peer
 class PeerClient(threading.Thread):
     # variable initializations for the client side of the peer
-    def __init__(self, ipToConnect, portToConnect, username, peerServer, responseReceived):
+    def __init__(self, ipToConnect, portToConnect, username, peerServer, responseReceived, flag, room_id ,room_peers : list):
         threading.Thread.__init__(self)
         # keeps the ip address of the peer that this will connect
         self.ipToConnect = ipToConnect
@@ -166,6 +190,7 @@ class PeerClient(threading.Thread):
         self.portToConnect = portToConnect
         # client side tcp socket initialization
         self.tcpClientSocket = socket(AF_INET, SOCK_STREAM)
+        self.udpClientSocket = socket(AF_INET, SOCK_DGRAM)
         # keeps the server of this client
         self.peerServer = peerServer
         # keeps the phrase that is used when creating the client
@@ -174,105 +199,148 @@ class PeerClient(threading.Thread):
         self.responseReceived = responseReceived
         # keeps if this client is ending the chat or not
         self.isEndingChat = False
+        #flag to indicate room or normal chat
+        self.flag = flag
+        #RoomID
+        self.room_id = room_id
+        #list of room_peers
+        self.room_peers = room_peers
+        self.isRoomEmpty = False
+
+    def update_peers(self):
+        request = "UPDATE " + str(self.room_id)
+        #logging.info("Send to " + self.registryName + ":" + str(self.registryPort) + " -> " + message)
+
+        self.peerServer.tcpClientSocket.send(request.encode())
+        response = self.peerServer.tcpClientSocket.recv(1024).decode()
+        if response[0] == "updated":
+            list_start = response.index('[')
+            list_end = response.index(']') + 1
+            list_string = response[list_start:list_end]
+            response2 = eval(list_string)
+        self.room_peers = response2
 
 
     # main method of the peer client thread
+
     def run(self):
-        print("Peer client started...")
-        # connects to the server of other peer
-        print("Connecting to " + self.ipToConnect + ":" + str(self.portToConnect) + "...")
-        self.tcpClientSocket.connect((self.ipToConnect, self.portToConnect))
-        # if the server of this peer is not connected by someone else and if this is the requester side peer client then enters here
-        if self.peerServer.isChatRequested == 0 and self.responseReceived is None:
-            # composes a request message and this is sent to server and then this waits a response message from the server this client connects
-            requestMessage = "CHAT-REQUEST " + str(self.peerServer.peerServerPort)+ " " + self.username
-            # logs the chat request sent to other peer
-            logging.info("Send to " + self.ipToConnect + ":" + str(self.portToConnect) + " -> " + requestMessage)
-            # sends the chat request
-            self.tcpClientSocket.send(requestMessage.encode())
-            print("Request message " + requestMessage + " is sent...")
-            # received a response from the peer which the request message is sent to
-            self.responseReceived = self.tcpClientSocket.recv(1024).decode()
-            # logs the received message
-            logging.info("Received from " + self.ipToConnect + ":" + str(self.portToConnect) + " -> " + self.responseReceived)
-            print("Response is " + self.responseReceived)
-            # parses the response for the chat request
-            self.responseReceived = self.responseReceived.split()
-            # if response is ok then incoming messages will be evaluated as client messages and will be sent to the connected server
-            if self.responseReceived[0] == "OK":
-                # changes the status of this client's server to chatting
+        
+        if self.flag == '5':        
+            print("Peer client started...")
+            # connects to the server of other peer
+            print("Connecting to " + self.ipToConnect + ":" + str(self.portToConnect) + "...")
+            self.tcpClientSocket.connect((self.ipToConnect, self.portToConnect))
+            # if the server of this peer is not connected by someone else and if this is the requester side peer client then enters here
+            if self.peerServer.isChatRequested == 0 and self.responseReceived is None:
+                # composes a request message and this is sent to server and then this waits a response message from the server this client connects
+                requestMessage = "CHAT-REQUEST " + str(self.peerServer.peerServerPort)+ " " + self.username
+                # logs the chat request sent to other peer
+                logging.info("Send to " + self.ipToConnect + ":" + str(self.portToConnect) + " -> " + requestMessage)
+                # sends the chat request
+                self.tcpClientSocket.send(requestMessage.encode())
+                print("Request message " + requestMessage + " is sent...")
+                # received a response from the peer which the request message is sent to
+                self.responseReceived = self.tcpClientSocket.recv(1024).decode()
+                # logs the received message
+                logging.info("Received from " + self.ipToConnect + ":" + str(self.portToConnect) + " -> " + self.responseReceived)
+                print("Response is " + self.responseReceived)
+                # parses the response for the chat request
+                self.responseReceived = self.responseReceived.split()
+                # if response is ok then incoming messages will be evaluated as client messages and will be sent to the connected server
+                if self.responseReceived[0] == "OK":
+                    # changes the status of this client's server to chatting
+                    self.peerServer.isChatRequested = 1
+                    # sets the server variable with the username of the peer that this one is chatting
+                    self.peerServer.chattingClientName = self.responseReceived[1]
+                    # as long as the server status is chatting, this client can send messages
+                    while self.peerServer.isChatRequested == 1:
+                        # message input prompt
+                        messageSent = input(self.username + ": ")
+                        # sends the message to the connected peer, and logs it
+                        self.tcpClientSocket.send(messageSent.encode())
+                        logging.info("Send to " + self.ipToConnect + ":" + str(self.portToConnect) + " -> " + messageSent)
+                        # if the quit message is sent, then the server status is changed to not chatting
+                        # and this is the side that is ending the chat
+                        if messageSent == ":q":
+                            self.peerServer.isChatRequested = 0
+                            self.isEndingChat = True
+                            break
+                    # if peer is not chatting, checks if this is not the ending side
+                    if self.peerServer.isChatRequested == 0:
+                        if not self.isEndingChat:
+                            # tries to send a quit message to the connected peer
+                            # logs the message and handles the exception
+                            try:
+                                self.tcpClientSocket.send(":q ending-side".encode())
+                                logging.info("Send to " + self.ipToConnect + ":" + str(self.portToConnect) + " -> :q")
+                            except BrokenPipeError as bpErr:
+                                logging.error("BrokenPipeError: {0}".format(bpErr))
+                        # closes the socket
+                        self.responseReceived = None
+                        self.tcpClientSocket.close()
+                # if the request is rejected, then changes the server status, sends a reject message to the connected peer's server
+                # logs the message and then the socket is closed       
+                elif self.responseReceived[0] == "REJECT":
+                    self.peerServer.isChatRequested = 0
+                    print("client of requester is closing...")
+                    self.tcpClientSocket.send("REJECT".encode())
+                    logging.info("Send to " + self.ipToConnect + ":" + str(self.portToConnect) + " -> REJECT")
+                    self.tcpClientSocket.close()
+                # if a busy response is received, closes the socket
+                elif self.responseReceived[0] == "BUSY":
+                    print("Receiver peer is busy")
+                    self.tcpClientSocket.close()
+            # if the client is created with OK message it means that this is the client of receiver side peer
+            # so it sends an OK message to the requesting side peer server that it connects and then waits for the user inputs.
+            elif self.responseReceived == "OK":
+                # server status is changed
                 self.peerServer.isChatRequested = 1
-                # sets the server variable with the username of the peer that this one is chatting
-                self.peerServer.chattingClientName = self.responseReceived[1]
-                # as long as the server status is chatting, this client can send messages
+                # ok response is sent to the requester side
+                okMessage = "OK"
+                self.tcpClientSocket.send(okMessage.encode())
+                logging.info("Send to " + self.ipToConnect + ":" + str(self.portToConnect) + " -> " + okMessage)
+                print("Client with OK message is created... and sending messages")
+                # client can send messsages as long as the server status is chatting
                 while self.peerServer.isChatRequested == 1:
-                    # message input prompt
+                    # input prompt for user to enter message
                     messageSent = input(self.username + ": ")
-                    # sends the message to the connected peer, and logs it
                     self.tcpClientSocket.send(messageSent.encode())
                     logging.info("Send to " + self.ipToConnect + ":" + str(self.portToConnect) + " -> " + messageSent)
-                    # if the quit message is sent, then the server status is changed to not chatting
-                    # and this is the side that is ending the chat
+                    # if a quit message is sent, server status is changed
                     if messageSent == ":q":
                         self.peerServer.isChatRequested = 0
                         self.isEndingChat = True
                         break
-                # if peer is not chatting, checks if this is not the ending side
+                # if server is not chatting, and if this is not the ending side
+                # sends a quitting message to the server of the other peer
+                # then closes the socket
                 if self.peerServer.isChatRequested == 0:
                     if not self.isEndingChat:
-                        # tries to send a quit message to the connected peer
-                        # logs the message and handles the exception
-                        try:
-                            self.tcpClientSocket.send(":q ending-side".encode())
-                            logging.info("Send to " + self.ipToConnect + ":" + str(self.portToConnect) + " -> :q")
-                        except BrokenPipeError as bpErr:
-                            logging.error("BrokenPipeError: {0}".format(bpErr))
-                    # closes the socket
+                        self.tcpClientSocket.send(":q ending-side".encode())
+                        logging.info("Send to " + self.ipToConnect + ":" + str(self.portToConnect) + " -> :q")
                     self.responseReceived = None
                     self.tcpClientSocket.close()
-            # if the request is rejected, then changes the server status, sends a reject message to the connected peer's server
-            # logs the message and then the socket is closed       
-            elif self.responseReceived[0] == "REJECT":
-                self.peerServer.isChatRequested = 0
-                print("client of requester is closing...")
-                self.tcpClientSocket.send("REJECT".encode())
-                logging.info("Send to " + self.ipToConnect + ":" + str(self.portToConnect) + " -> REJECT")
-                self.tcpClientSocket.close()
-            # if a busy response is received, closes the socket
-            elif self.responseReceived[0] == "BUSY":
-                print("Receiver peer is busy")
-                self.tcpClientSocket.close()
-        # if the client is created with OK message it means that this is the client of receiver side peer
-        # so it sends an OK message to the requesting side peer server that it connects and then waits for the user inputs.
-        elif self.responseReceived == "OK":
-            # server status is changed
-            self.peerServer.isChatRequested = 1
-            # ok response is sent to the requester side
-            okMessage = "OK"
-            self.tcpClientSocket.send(okMessage.encode())
-            logging.info("Send to " + self.ipToConnect + ":" + str(self.portToConnect) + " -> " + okMessage)
-            print("Client with OK message is created... and sending messages")
-            # client can send messsages as long as the server status is chatting
-            while self.peerServer.isChatRequested == 1:
-                # input prompt for user to enter message
-                messageSent = input(self.username + ": ")
-                self.tcpClientSocket.send(messageSent.encode())
-                logging.info("Send to " + self.ipToConnect + ":" + str(self.portToConnect) + " -> " + messageSent)
-                # if a quit message is sent, server status is changed
-                if messageSent == ":q":
-                    self.peerServer.isChatRequested = 0
-                    self.isEndingChat = True
-                    break
-            # if server is not chatting, and if this is not the ending side
-            # sends a quitting message to the server of the other peer
-            # then closes the socket
-            if self.peerServer.isChatRequested == 0:
-                if not self.isEndingChat:
-                    self.tcpClientSocket.send(":q ending-side".encode())
-                    logging.info("Send to " + self.ipToConnect + ":" + str(self.portToConnect) + " -> :q")
-                self.responseReceived = None
-                self.tcpClientSocket.close()
+        
+        elif self.flag == '7':
+            
+            print("Joined Room Successfully ...")
+            while len(self.room_peers):
+                #self.update_peers()
+                message = input(f"{self.username}: ")
+                message = f"{self.username}: {message}"
+                for peer in self.room_peers:
+                    if int(peer) != self.peerServer.peerServerPort:
+                        self.udpClientSocket.sendto(message.encode(), (self.ipToConnect, int(peer)))
+                        #self.tcpClientSocket.connect((self.ipToConnect, int(peer)))
+                        #self.tcpClientSocket.send(message.encode())
+                        #self.tcpClientSocket.close()
+
                 
+
+
+
+            
+                    
 
 # main process of the peer
 class peerMain:
@@ -369,7 +437,8 @@ class peerMain:
                 # main process waits for the client thread to finish its chat
                 if searchStatus != None and searchStatus != 0:
                     searchStatus = searchStatus.split(":")
-                    self.peerClient = PeerClient(searchStatus[0], int(searchStatus[1]) , self.loginCredentials[0], self.peerServer, None)
+                    self.peerServer.chat = 1
+                    self.peerClient = PeerClient(searchStatus[0], int(searchStatus[1]) , self.loginCredentials[0], self.peerServer, '5', None, None)
                     self.peerClient.start()
                     self.peerClient.join()
             # if this is the receiver side then it will get the prompt to accept an incoming request during the main loop
@@ -387,7 +456,15 @@ class peerMain:
             elif choice == "7" and self.isOnline:
             #This choice joins already existing chatroom
                 room_id = input("Enter a Room ID: ")
-                self.search_room(room_id)
+                search_status = self.search_room(room_id)
+
+                if search_status != 0 and search_status != None:
+                    #def __init__(self, ipToConnect, portToConnect, username, peerServer, responseReceived, flag, room_peers : list)
+                    ipToConnect = "192.168.1.104"
+                    self.peerServer.room = 1
+                    self.peerClient = PeerClient(ipToConnect, None, self.loginCredentials[0], self.peerServer, None, '7', room_id ,search_status)
+                    self.peerClient.start()
+                    self.peerClient.join()
 
 
 
@@ -435,13 +512,22 @@ class peerMain:
         message = "JOINROOM " + room_id + " " + str(self.peerServerPort)
         logging.info("Send to " + self.registryName + ":" + str(self.registryPort) + " -> " + message)
         self.tcpClientSocket.send(message.encode())
-        response = self.tcpClientSocket.recv(1024).decode().split()
+        response = self.tcpClientSocket.recv(1024).decode()
+
+        list_start = response.index('[')
+        list_end = response.index(']') + 1
+        list_string = response[list_start:list_end]
+        response2 = eval(list_string)
+
+        response = response.split()
         logging.info("Received from " + self.registryName + " -> " + " ".join(response))
         if response[0] == "success":
             print(room_id + " is found successfully...")
-            print("\nYou have joined the room ...\n")
+            return response2
+        
         elif response[0] == "search-fail":
             print(room_id + " is not found")
+            return 0
 
 
     # account creation function

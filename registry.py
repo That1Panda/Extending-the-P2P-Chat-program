@@ -162,10 +162,12 @@ class ClientThread(threading.Thread):
                     if db.is_room_exist(message[1]):
                         # checks if the room exists
                         # and sends the related response to peer
-                        response = "success"
                         id, peers = db.get_room_peers(message[1])
                         peers.append(message[2])
+                        peers = list(set(peers))
                         db.update_room(id, peers)
+                        response = "success " + str(peers)
+                        print(response)
                         logging.info("Send to " + self.ip + ":" + str(self.port) + " -> " + response) 
                         self.tcpClientSocket.send(response.encode())
                     # enters if username does not exist 
@@ -173,7 +175,12 @@ class ClientThread(threading.Thread):
                         response = "search-fail"
                         logging.info("Send to " + self.ip + ":" + str(self.port) + " -> " + response) 
                         self.tcpClientSocket.send(response.encode())
-
+                
+                elif message[0] == "UPDATE":
+                        id, peers = db.get_room_peers(message[1])
+                        response = "updated " + str(peers)
+                        self.tcpClientSocket.send(response.encode())
+                
             except OSError as oErr:
                 logging.error("OSError: {0}".format(oErr)) 
 
