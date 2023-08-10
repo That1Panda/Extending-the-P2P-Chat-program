@@ -157,6 +157,25 @@ class ClientThread(threading.Thread):
                         logging.info("Send to " + self.ip + ":" + str(self.port) + " -> " + response) 
                         self.tcpClientSocket.send(response.encode())
 
+                # elif message[0] == "SEARCHROOM":
+                #     # checks if an account with the username exists
+                #     if db.is_room_exist(message[1]):
+                #         # checks if the room exists
+                #         # and sends the related response to peer
+                #         #id, peers = db.get_room_peers(message[1])
+                #         #peers.append(message[2])
+                #         #peers = list(set(peers))
+                #         #db.update_room(id, peers)
+                #         response = "success"
+                #         print(response)
+                #         logging.info("Send to " + self.ip + ":" + str(self.port) + " -> " + response) 
+                #         self.tcpClientSocket.send(response.encode())
+                #     # enters if username does not exist 
+                #     else:
+                #         response = "search-fail"
+                #         logging.info("Send to " + self.ip + ":" + str(self.port) + " -> " + response) 
+                #         self.tcpClientSocket.send(response.encode())
+                
                 elif message[0] == "JOINROOM":
                     # checks if an account with the username exists
                     if db.is_room_exist(message[1]):
@@ -175,10 +194,15 @@ class ClientThread(threading.Thread):
                         response = "search-fail"
                         logging.info("Send to " + self.ip + ":" + str(self.port) + " -> " + response) 
                         self.tcpClientSocket.send(response.encode())
-                
+
                 elif message[0] == "UPDATE":
                         id, peers = db.get_room_peers(message[1])
                         response = "updated " + str(peers)
+                        self.tcpClientSocket.send(response.encode())
+
+                elif message[0] == "EXIT":
+                        db.remove_peer(message[1], message[2])
+                        response = "SUCCESS"
                         self.tcpClientSocket.send(response.encode())
                 
             except OSError as oErr:

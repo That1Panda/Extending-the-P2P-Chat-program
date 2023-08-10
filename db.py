@@ -96,3 +96,12 @@ class DB:
             "$set": {"peers": peers}
         }
         self.db.rooms.update_one(filter_criteria, update_data)
+    
+    def remove_peer(self, id, peer):
+        filter_criteria = {"room_id": id}
+        room = self.db.rooms.find_one(filter_criteria)
+        new_peers = room["peers"].remove(peer)
+        update_data = {
+            "$set": {"peers": new_peers}
+        }
+        self.db.rooms.update_one(filter_criteria, update_data)
