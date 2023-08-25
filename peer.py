@@ -62,7 +62,7 @@ class PeerServer(threading.Thread):
 
 
         
-        self.udpServerSocket.bind(("192.168.1.104", self.roomServerPort))
+        self.udpServerSocket.bind(("192.168.1.107", self.roomServerPort))
         
         #socket initialization for chatting
         self.tcpServerSocket.bind((self.peerServerHostname, self.peerServerPort))
@@ -98,11 +98,10 @@ class PeerServer(threading.Thread):
                         #socket initializatoion for rooms
                         #self.udpServerSocket.bind((self.peerServerHostname, self.peerServerPort))
                         while(1):
-                            if(self.room==1):
-                                data, address = self.udpServerSocket.recvfrom(1024)
-                                messageReceived = data.decode()
-                                print(messageReceived)
-                            else:
+                            data, address = self.udpServerSocket.recvfrom(1024)
+                            messageReceived = data.decode()
+                            print(messageReceived)
+                            if(self.room == 0):
                                 break
                     # if the socket that receives the data is the one that
                     # is used to communicate with a connected peer, then enters here
@@ -183,7 +182,7 @@ class PeerServer(threading.Thread):
 # Client side of peer
 class PeerClient(threading.Thread):
     # variable initializations for the client side of the peer
-    def __init__(self, ipToConnect, portToConnect, username, peerServer, responseReceived, flag, room_id ,room_peers : list, registry_name = "192.168.1.104"):
+    def __init__(self, ipToConnect, portToConnect, username, peerServer, responseReceived, flag, room_id ,room_peers : list, registry_name = "192.168.1.107"):
         threading.Thread.__init__(self)
         # keeps the ip address of the peer that this will connect
         # ip address of the registry
@@ -340,13 +339,16 @@ class PeerClient(threading.Thread):
         elif self.flag == '7':
             self.tcpClientSocket.connect((self.registryName,self.registryPort))
             print("Joined Room Successfully ...")
+
             while(1):
                 self.update_peers()
                 if(not self.room_peers):
                     break
+
                 message = input(f"{self.username}: ")
                 message = f"\n{self.username}: {message}"
                 
+                self.update_peers()
                 if(len(message) != 0 and message.split()[1] == ":q"):
                     if self.exit() == "SUCCESS":
                         message = f"{self.username} Disconnected !"
@@ -494,7 +496,7 @@ class peerMain:
 
                 if search_status != 0 and search_status != None:
                     #def __init__(self, ipToConnect, portToConnect, username, peerServer, responseReceived, flag, room_peers : list)
-                    ipToConnect = "192.168.1.104"
+                    ipToConnect = "192.168.1.107"
                     self.peerServer.room = 1
                     self.peerClient = PeerClient(ipToConnect, None, self.loginCredentials[0], self.peerServer, None, '7', room_id ,search_status)
                     self.peerClient.start()
