@@ -1,20 +1,36 @@
 # P2P Chat
 It is a p2p chat application that uses centralized index approach. It consists of two parts a registry application and a chat application. Registry application keeps track of the peers, and chat application allows peers to communicate with each other.
 * Registry application can achieve following operations:
-    * **Account Creation**<br/>
-    Accounts can be created on registry. Each user is identified by a unique username.
-    * **Login and Logout**<br/>
-    When a user logs in, registry saves its ip address and port number into database and this entry stays in the database until the user logs out or disconnected.<br/>As long as user is online, a 'HELLO' message is sent to registry at every second to indicate that the user is still connected. If the registry hasn't received a 'HELLO' message from a user in 3 seconds, it considers user as disconnected and removes its entry from online peers.
-    * **Search**<br/>
-    A user can search another online user using that user's username to retrieve the ip address and the port number of the user.
+  
+    * If the user chooses to create an account (choice 1), the code prompts for a username and password, and then calls the createAccount method to send a join message to the registry for account creation.
+
+    * If the user chooses to log in (choice 2), the code prompts for a username, password, and port numbers for the peer server and room server. It then calls the login method to send a login message to the registry and performs actions based on the response.
+      
+    * If the user chooses to log out (choice 3), the code calls the logout method to send a logout message to the registry and performs necessary cleanup.
+      
+    * If the user chooses to search for a user (choice 4), the code prompts for a username and calls the searchUser method to send a search message to the registry and retrieve the IP address of the user if found.
+      
+    * If the user chooses to start a chat (choice 5), the code prompts for the username of the user to chat with. It then calls the searchUser method to retrieve the IP address and port number of the user and creates a client thread (PeerClient) to handle the chat.
+      
+    * If the user chooses to create a chatroom (choice 6), the code prompts for a room ID and calls the create_room method to send a create room message to the registry.
+  
+    * If the user chooses to join a chatroom (choice 7), the code prompts for a room ID, searches for the room using the search_room method, and creates a client thread (PeerClient) to handle the room communication
+
 * Chat application can achieve following operations:
     * **Communication with Registry**<br/>
-    Chat application sends messages to registry to achieve account creation, login, logout, and search operations.
+    Chat application sends messages to registry to achieve account creation, login, logout, search, start chat, create chat room and join a room operations.
     * **Chat**<br/>
     When a user wants to chat with another user, a chat request is sent to the other user. User should send an 'OK' message to accept or a 'REJECT' message to reject. However, if user is already chatting with someone else, then a 'BUSY' message will be sent automatically.
+The sendHelloMessage method is responsible for sending periodic "HELLO" messages to the registry using a timer thread.
 
 ## How to Use It?
 * Clone the repo.
-* Run 'registry.py'.
-* Run 'peer.py'.
-* Chat!
+* Run 'registry.py' and get your ip address.
+* Run 'peer.py' and use your ip address to choose from following services:
+1- create account
+2- login
+3- logout
+4- search
+5- start chat
+6- create a chat room  
+7- join a room        
