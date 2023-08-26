@@ -27,10 +27,10 @@ The sendHelloMessage method is responsible for sending periodic "HELLO" messages
 * Clone the repo.
 * Run 'registry.py' and get your ip address.
 * Run 'peer.py' and use your ip address to choose from following services:
-1- create account
-2- login
-3- logout
-4- search
-5- start chat
-6- create a chat room  
-7- join a room        
+     * create account
+     * login
+     * logout
+     * search
+     * start a chat
+     * create a room
+     * join a room
